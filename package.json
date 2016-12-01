@@ -1,6 +1,6 @@
 {
   "name": "docker-configurator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -9,8 +9,12 @@
     "build": "babel src -d lib",
     "dev": "nodemon ./index.js --template=\"./.data/test.dust:./.data/nginx.conf:webfront\" --use-strict --harmony"
   },
-  "keywords": [],
-  "author": "",
+  "repository" :  {
+	  "type" : "git",
+	  "url" : "https://github.com/westtrade/docker-configurator.git"
+  },
+  "keywords": ["docker"],
+  "author": "Popov Gennadiy <me@westtrade.tk>",
   "license": "MIT",
   "dependencies": {
     "babel-register": "^6.18.0",
