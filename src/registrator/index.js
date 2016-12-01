@@ -3,15 +3,17 @@
 * @Date:   2016-11-25T04:54:02+03:00
 * @Email:  me@westtrade.tk
 * @Last modified by:   dio
-* @Last modified time: 2016-11-29T14:17:39+03:00
+* @Last modified time: 2016-12-01T06:16:45+03:00
 */
 
 import createDebugLog from 'debug';
 import EventEmmiter from 'events';
 import Datastore from 'nedb-promise';
 import { createHash } from 'crypto';
+import { tryCatch } from '../utils';
+import { name } from '../../package.json';
 
-const debug = createDebugLog('docker-gen-container-watcher');
+const debug = createDebugLog(`${name}-watcher`);
 
 /**
  * Reducer for container environment variables, reduce list to standart Object
@@ -50,17 +52,21 @@ const composeContainerInfo = (containerInfo = {}) => {
 	env = env.reduce(envParser, {});
 
 	const containerAddress = Object.values(Networks).map(network => network.IPAddress);
-	const ports = Object.keys(Ports)
-		.filter(port => port.indexOf('udp') < 0)
-		.map(port => port.split('/')[0]);
+	let network = null;
+	if (Ports) {
 
-	const [network] = containerAddress.reduce((result, ip) => {
-		result.push({ ip, ports });
-		return result;
-	}, []);
+		const ports = Object.keys(Ports)
+			.filter(port => port.indexOf('udp') < 0)
+			.map(port => port.split('/')[0]);
+
+		[network] = containerAddress.reduce((result, ip) => {
+			result.push({ ip, ports });
+			return result;
+		}, []);
+	}
+
 
 	const id = objectID(Id);
-
 	const mappedContainerInfo = { id, dockerId: Id, network, name, env };
 	mappedContainerInfo.hash = createHash('md5').update(JSON.stringify(mappedContainerInfo)).digest('hex');
 	return mappedContainerInfo;
@@ -90,8 +96,25 @@ const privateMethodGetContainers = Symbol('get docker containers method');
  */
 const privateMethodInspectContainers = Symbol('inspect docker container method');
 
-export default class containersWatcher extends EventEmmiter {
 
+const eventHandler = Symbol('Docker events handler');
+
+
+/**
+* ContainersWatcher - Description
+* @extends EventEmmiter
+*/
+export default class ContainersWatcher extends EventEmmiter {
+
+	/**
+	 * constructor
+	 *
+	 * @param {object} Unknown                   Settings
+	 * @param {type}   Unknown.dockerClient      Description
+	 * @param {type}   Unknown.datastoreSettings Description
+	 *
+	 * @return {type} Description
+	 */
 	constructor({ dockerClient, datastoreSettings }) {
 
 		super();
@@ -101,59 +124,106 @@ export default class containersWatcher extends EventEmmiter {
 			store: new Datastore(datastoreSettings),
 			allowedStatus: ['start', 'stop', 'destroy'],
 			isInitalized: false,
+			next: Promise.resolve(),
 		};
 
-		this[privateKey].store.ensureIndex({ fieldName: 'dockerId', unique: true });
-
-		this[privateMethodUpdate]()
-			.catch(e => this.emit('error', e))
-			.then(() => {
-				this[privateKey].isInitalized = true;
-			});
+		this[privateKey].next = this[privateMethodUpdate]();
 
 		dockerClient.getEvents((error, stream) => {
 
 			if (error) {
-				this.emit('error', error);
-				return;
+				return this.emit('error', error);
 			}
 
-			stream.on('data', async (eventBuffer) => {
-
-				try {
-					const data = JSON.parse(eventBuffer.toString('utf-8'));
-					const { status, Type, id: containerId } = data;
-					const eventIsNecessary = this[privateKey].allowedStatus.includes(status)
-						&& Type === 'container';
-
-					if (eventIsNecessary) {
-						await this[privateMethodUpdate](data);
-					}
-				} catch (e) {
-					this.emit('error', e);
-				}
-
+			stream.on('data', (evBuf) => {
+				this[privateKey].next = this[eventHandler](evBuf).catch(e => this.emit('error', e));
 			});
 		});
 	}
 
+	async [eventHandler](eventBuffer) {
+
+		await this[privateKey].next;
+
+		if (!this[privateKey].isInitalized) {
+			this[privateKey].isInitalized = true;
+		}
+
+		const [jsonError, eventData] = tryCatch(() => JSON.parse(eventBuffer.toString('utf-8')));
+
+		if (jsonError) {
+			return this.emit(jsonError);
+		}
+
+		const { status, Type } = eventData;
+		const eventIsNecessary = this[privateKey].allowedStatus.includes(status)
+			&& Type === 'container';
+
+		if (eventIsNecessary) {
+			await this[privateKey].store.ensureIndex({ fieldName: 'dockerId', unqiue: true });
+			await this[privateMethodUpdate](eventData);
+			await this[privateKey].store.removeIndex('dockerId');
+		}
+	}
+
+	/**
+	 * isInitalized - Description
+	 *
+	 * @return {type} Description
+	 */
 	get isInitalized() {
 		return this[privateKey].isInitalized;
 	}
 
+	/**
+	 * find - Description
+	 *
+	 * @param {array} args Description
+	 *
+	 * @return {type} Description
+	 */
 	find(...args) {
 		return this[privateKey].store.find(...args);
 	}
 
+	/**
+	 * privateMethodUpdate - Description
+	 *
+	 * @param {type} event Description
+	 *
+	 * @return {type} Description
+	 */
 	async [privateMethodUpdate](event) {
 
+		debug('Update container list start');
 		let deleted = await this[privateKey].store.find({});
-		deleted = deleted.reduce((result, current) => {
+		const duplicatedContainers = deleted.reduce((result, containerInfo) => {
 
+			const { id } = containerInfo;
+			const { unique, duplicated } = result;
+			unique.includes(id) ? duplicated.push(id) : unique.push(id);
+			return { unique, duplicated };
+
+		}, { unique: [], duplicated: [] });
+
+		const { duplicated } = duplicatedContainers;
+		if (duplicated.length) {
+
+			const removeQuery = {
+				id: { $in: duplicated },
+			};
+
+			debug('Remove duplcated items %j, duplcatedItems: %s', removeQuery, duplicated);
+			const totalRemoved = await this[privateKey].store.remove(removeQuery, { multi: true });
+			debug('Total removed %s', totalRemoved);
+
+			deleted = await this[privateKey].store.find({});
+		}
+
+		deleted = deleted.reduce((result, current) => {
 			const { id } = current;
 			result[id] = current;
 			return result;
-
 		}, {});
 
 		const created = {};
@@ -191,7 +261,7 @@ export default class containersWatcher extends EventEmmiter {
 				},
 			};
 
-			debug('Remove query %j, removedItems', removeQuery, deleted);
+			debug('Remove query %j, removedItems %j', removeQuery, deleted);
 			totalRemoved = await this[privateKey].store.remove(removeQuery, { multi: true });
 		}
 
@@ -215,43 +285,50 @@ export default class containersWatcher extends EventEmmiter {
 		}
 
 		const totalItems = await this[privateKey].store.count({});
-
-		debug(`
-
-  Containers list has been changed
---------------------------------------------------------------------------------
-  created: ${totalCreated}
-  updated: ${totalUpdated}
-  deleted: ${totalRemoved}
---------------------------------------------------------------------------------
-  total in store: ${totalItems}
-  total in docker: ${containersList.length}
-================================================================================
-		`);
-
+		debug('Changed event was happend');
 		if (totalCreated > 0 || totalCreated > 0 || totalRemoved > 0 || !this.isInitalized) {
+
+			debug(`
+
+	  Containers list has been changed
+	--------------------------------------------------------------------------------
+	  created: ${totalCreated}
+	  updated: ${totalUpdated}
+	  deleted: ${totalRemoved}
+	--------------------------------------------------------------------------------
+	  total in store: ${totalItems}
+	  total in docker: ${containersList.length}
+	================================================================================
+			`);
+
 			const additionalEventData = {
 				created: totalCreated,
 				updated: totalUpdated,
 				removed: totalRemoved,
-				isInitialization: !this.isInitalized,
 			};
+
+			if (!this.isInitalized) {
+				additionalEventData.status = 'initialized';
+			}
+
 			event = Object.assign({}, event, additionalEventData);
 			this.emit('change', event);
 		}
+
+		debug('Update container list end');
 	}
 
 	[privateMethodGetContainers]() {
 		return new Promise((resolve, reject) => {
 			const promiseCallback = (error, result) => error ? reject(error) : resolve(result);
 			this[privateKey].client.listContainers(promiseCallback);
-		}).catch(error => this.emit('error', error));
+		});
 	}
 
 	[privateMethodInspectContainers](containerId) {
 		return new Promise((resolve, reject) => {
 			const promiseCallback = (error, result) => error ? reject(error) : resolve(result);
 			this[privateKey].client.getContainer(containerId).inspect(promiseCallback);
-		}).catch(error => this.emit('error', error));
+		});
 	}
 }

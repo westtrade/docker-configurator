@@ -7,5 +7,5 @@
 	},
 	"ext": "js json yml yaml",
 	"ignore": [".data"],
-	"verbose" : true
+	"verbose" : false
 }
