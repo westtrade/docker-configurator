@@ -9,6 +9,9 @@
     "build": "babel src -d lib",
     "dev": "nodemon ./index.js --template=\"./.data/test.dust:./.data/nginx.conf:webfront\" --use-strict --harmony"
   },
+  "bin": {
+	  "docker-configurator": "./.bin/docker-configurator.js"
+  },
   "repository" :  {
 	  "type" : "git",
 	  "url" : "https://github.com/westtrade/docker-configurator.git"
