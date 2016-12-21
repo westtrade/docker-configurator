@@ -3,7 +3,7 @@
 * @Date:   2016-11-26T11:27:20+03:00
 * @Email:  me@westtrade.tk
 * @Last modified by:   dio
-* @Last modified time: 2016-12-01T07:16:27+03:00
+* @Last modified time: 2016-12-01T08:08:57+03:00
 */
 
 import createDebugLog from 'debug';
@@ -21,41 +21,38 @@ import { tryCatch } from '../utils';
 
 const debug = createDebugLog(`${name}-generator`);
 
-const readFile = (filePath, encode = 'UTF-8') => {
-	return new Promise((resolve, reject) => {
-		fs.readFile(filePath, encode, (error, fileContent) => {
-			if (error) {
-				return reject(error);
-			}
+const readFile = (filePath, encode = 'UTF-8') => new Promise((resolve, reject) => {
+	fs.readFile(filePath, encode, (error, fileContent) => {
+		if (error) {
+			return reject(error);
+		}
 
-			resolve(fileContent);
-		});
+		return resolve(fileContent);
 	});
-};
+});
 
-const writeFile = (filePath, fileContent) => {
-	return new Promise((resolve, reject) => {
-		fs.writeFile(filePath, fileContent, (error) => {
-			if (error) {
-				return reject(error);
-			}
 
-			resolve();
-		});
+const writeFile = (filePath, fileContent) => new Promise((resolve, reject) => {
+	fs.writeFile(filePath, fileContent, (error) => {
+		if (error) {
+			return reject(error);
+		}
+
+		return resolve();
 	});
-};
+});
 
-const restartContainer = (dockerClient, containerId) => {
-	return new Promise((resolve, reject) => {
-		dockerClient.getContainer(containerId).restart((error, result) => {
-			if (error) {
-				return reject(error);
-			}
 
-			resolve(result);
-		});
+const restartContainer = (dockerClient, containerId) => new Promise((resolve, reject) => {
+	dockerClient.getContainer(containerId).restart((error, result) => {
+		if (error) {
+			return reject(error);
+		}
+
+		return resolve(result);
 	});
-};
+});
+
 
 const getFileMD5 = filePath => new Promise((resolve) => {
 	fs.stat(filePath, (err) => {
@@ -63,17 +60,16 @@ const getFileMD5 = filePath => new Promise((resolve) => {
 			return resolve(null);
 		}
 
-		fs.readFile(filePath, 'utf-8', (err, templateContent) => {
-			if (err) {
+		return fs.readFile(filePath, 'utf-8', (foldedError, templateContent) => {
+			if (foldedError) {
 				return resolve(null);
 			}
 
-			let templateHash = createHash('md5').update(templateContent).digest("hex");
-			resolve(templateHash);
+			const templateHash = createHash('md5').update(templateContent).digest('hex');
+			return resolve(templateHash);
 		});
 	});
 });
-
 
 
 const privateProperties = Symbol('Private options property');
@@ -158,17 +154,15 @@ export default class ConfigurationGenerator extends EventEmmiter {
 
 	renderTemplate(templateContent = '') {
 
-		let templateID = createHash('md5').update(templateContent).digest("hex");
+		const templateID = createHash('md5').update(templateContent).digest('hex');
 		if (!this[privateProperties].templatesCache.includes(templateID)) {
-			let compiledTemplate = Dust.compile(templateContent, templateID);
+			const compiledTemplate = Dust.compile(templateContent, templateID);
 			Dust.loadSource(compiledTemplate);
 			this[privateProperties].templatesCache.push(templateID);
 		}
 
-		return new Promise((resolve, reject) => {
-			Dust.render(templateID, this[ctxKey], (error, outputString) => {
-				return error ? reject(error) : resolve(outputString);
-			});
+		return new Promise((res, rej) => {
+			Dust.render(templateID, this[ctxKey], (err, out) => err ? rej(err) : res(out));
 		});
 	}
 
@@ -180,8 +174,8 @@ export default class ConfigurationGenerator extends EventEmmiter {
 		const reloadContainers = [];
 
 		if (Actor) {
-			const { Attributes: { name }} = Actor;
-			debug('Recreate start by event from container: %s', name);
+			const { Attributes: { name: containerName } } = Actor;
+			debug('Recreate start by event from container: %s', containerName);
 		} else {
 			debug('Recreate start by initialize event');
 		}
@@ -194,15 +188,17 @@ export default class ConfigurationGenerator extends EventEmmiter {
 
 			let canReloadContainer = true;
 			if (dockerId && status !== 'initialized' && dockerService) {
-				const name = `/${dockerService}`;
-				const sameContainers = await this[privateProperties].watcher.find({ dockerId, name });
+				const fullContainerName = `/${dockerService}`;
+				const sameContainers = await this[privateProperties].watcher
+					.find({ dockerId, name: fullContainerName });
+
 				canReloadContainer = sameContainers.length === 0;
 			}
 
 			const existsConfigHash = await getFileMD5(destinationPath);
 			const templateSource = await readFile(templatePath);
 			const configContent = await this.renderTemplate(templateSource);
-			const currentTemplateHash = createHash('md5').update(configContent).digest("hex");
+			const currentTemplateHash = createHash('md5').update(configContent).digest('hex');
 			if (existsConfigHash !== currentTemplateHash) {
 				await writeFile(destinationPath, configContent);
 				debug('Configuration file has been changed');
@@ -213,7 +209,7 @@ export default class ConfigurationGenerator extends EventEmmiter {
 			}
 
 			if (this[privateProperties].dockerClient && dockerService && canReloadContainer) {
-				if (!reloadContainers.includes(dockerService)){
+				if (!reloadContainers.includes(dockerService)) {
 					reloadContainers.push(dockerService);
 				}
 			}
