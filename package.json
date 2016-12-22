@@ -1,6 +1,6 @@
 {
   "name": "docker-configurator",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Generate configuration for docker container apps like nginx, from it's metadata such as container container port or any environemnt variables. Watch for container changes and reload container.",
   "main": "index.js",
   "scripts": {
