@@ -3,94 +3,46 @@
 * @Date:   2016-11-26T11:27:20+03:00
 * @Email:  me@westtrade.tk
 * @Last modified by:   dio
-* @Last modified time: 2016-12-01T08:08:57+03:00
+* @Last modified time: 2016-12-22T04:24:44+03:00
 */
+
+'use strict';
 
 import createDebugLog from 'debug';
 import EventEmmiter from 'events';
 import Dust from 'dustjs-linkedin';
 import MongoQS from 'mongo-querystring';
 import chokidar from 'chokidar';
-import fs from 'fs';
 import qs from 'qs';
 import { resolve as pathResolve } from 'path';
 import { createHash } from 'crypto';
+import assert from 'assert';
 
+import { readFile, writeFile, restartContainer, getFileMD5 } from '../fs';
 import { name } from '../../package.json';
-import { tryCatch } from '../utils';
+import { tryCatch, convertRegexpParams } from '../utils';
 
 const debug = createDebugLog(`${name}-generator`);
 
-const readFile = (filePath, encode = 'UTF-8') => new Promise((resolve, reject) => {
-	fs.readFile(filePath, encode, (error, fileContent) => {
-		if (error) {
-			return reject(error);
-		}
-
-		return resolve(fileContent);
-	});
-});
-
-
-const writeFile = (filePath, fileContent) => new Promise((resolve, reject) => {
-	fs.writeFile(filePath, fileContent, (error) => {
-		if (error) {
-			return reject(error);
-		}
-
-		return resolve();
-	});
-});
-
-
-const restartContainer = (dockerClient, containerId) => new Promise((resolve, reject) => {
-	dockerClient.getContainer(containerId).restart((error, result) => {
-		if (error) {
-			return reject(error);
-		}
-
-		return resolve(result);
-	});
-});
-
-
-const getFileMD5 = filePath => new Promise((resolve) => {
-	fs.stat(filePath, (err) => {
-		if (err) {
-			return resolve(null);
-		}
-
-		return fs.readFile(filePath, 'utf-8', (foldedError, templateContent) => {
-			if (foldedError) {
-				return resolve(null);
-			}
-
-			const templateHash = createHash('md5').update(templateContent).digest('hex');
-			return resolve(templateHash);
-		});
-	});
-});
-
-
 const privateProperties = Symbol('Private options property');
 const containersChangeHandler = Symbol('Container changed event handler');
-// const configurationGenerator = Symbol('Generate new configuration');
-const ctxKey = Symbol('Context private key');
+const renderContextKey = Symbol('Render context');
+
+
+Dust.optimizers.format = (ctx, node) => node;
 
 export default class ConfigurationGenerator extends EventEmmiter {
 
 	constructor({ dockerClient, templates, watcher }) {
 
 		templates = templates || [];
-
 		if (typeof templates === 'string') {
 			templates = [templates];
 		}
 
+		assert(typeof templates, 'Argument templates must be an Array');
 		templates = templates.map(templateString => templateString.split(':'));
-
 		debug('Configuration generator created, with %s template%s', templates.length, templates.length > 1 ? '\'s' : '');
-
 		super();
 
 		this[privateProperties] = {
@@ -103,23 +55,42 @@ export default class ConfigurationGenerator extends EventEmmiter {
 		};
 
 		const me = this;
-		this[ctxKey] = {
 
-			async containers(chunk, context, bodies, params) {
+		/**
+		 * @namespace
+		 * @property {object} 	Context		File rendering context
+		 */
+		this[renderContextKey] = {
+
+			inspect(chunk, context, bodies, params) {
+
+				const { dockerId } = Object.assign({}, { dockerId: '' }, params);
+
+				assert(dockerId && dockerId.length, 'dockerId is required');
+				assert.equal(typeof dockerId, 'string', 'dockerId must be a string');
+
+				const result = new Promise((resolve, reject) => {
+					const container = dockerClient.getContainer(dockerId);
+					container.inspect((dockerError, containerData) => dockerError
+						? reject(dockerError)
+						: resolve(containerData));
+				}).catch(e => me.emit('error', e));
+
+				return result;
+
+			},
+
+			containers(chunk, context, bodies, params) {
+
+				// const mongoQs = new MongoQS();
 
 				let { query } = Object.assign({}, { query: '' }, params);
-				const mongoQs = new MongoQS();
+				query = qs.parse(query);
+				query = convertRegexpParams(query);
+				const resultPromise = watcher.find(query)
+					.catch(e => me.emit('error', e));
 
-				const [queryError, parsedQuery] = tryCatch(() => mongoQs.parse(qs.parse(query)));
-
-				if (queryError) {
-					me.emit('error', queryError);
-					query = {};
-				} else {
-					query = parsedQuery;
-				}
-
-				return watcher.find(query);
+				return resultPromise;
 			},
 
 			json(chunk, context) {
@@ -131,23 +102,26 @@ export default class ConfigurationGenerator extends EventEmmiter {
 
 				if (jsonError) {
 					me.emit('error', jsonError);
+					chunk.setError(jsonError);
 				} else {
 					chunk.write(resultString);
 				}
-
-				return true;
 			},
 		};
 
 		watcher.on('error', watcherError => this.emit('error', watcherError));
-		watcher.on('change', async (...args) => {
-			this[privateProperties].next = this[containersChangeHandler](...args);
+		watcher.on('change', (...args) => {
+			debug('Containers list changed');
+			const next = this[containersChangeHandler](...args);
+			this[privateProperties].next = next.catch(reasonError => this.emit('error', reasonError));
 		});
 
 		const watchedFilesList = templates.map(([templatePath]) => pathResolve(templatePath));
 		const watchedFiles = chokidar.watch(watchedFilesList, { persistent: true });
 		watchedFiles.on('change', (...args) => {
-			this[privateProperties].next = this[containersChangeHandler](...args);
+			debug('Tempalte changed');
+			const next = this[containersChangeHandler](...args);
+			this[privateProperties].next = next.catch(reasonError => this.emit('error', reasonError));
 		});
 		// this.on('update', containers => this[configurationGenerator](containers));
 	}
@@ -155,14 +129,16 @@ export default class ConfigurationGenerator extends EventEmmiter {
 	renderTemplate(templateContent = '') {
 
 		const templateID = createHash('md5').update(templateContent).digest('hex');
+		debug('Render template. Template source hash: %s', templateID);
 		if (!this[privateProperties].templatesCache.includes(templateID)) {
+			debug('Template does not exists, create it from string');
 			const compiledTemplate = Dust.compile(templateContent, templateID);
 			Dust.loadSource(compiledTemplate);
 			this[privateProperties].templatesCache.push(templateID);
 		}
 
 		return new Promise((res, rej) => {
-			Dust.render(templateID, this[ctxKey], (err, out) => err ? rej(err) : res(out));
+			Dust.render(templateID, this[renderContextKey], (err, out) => err ? rej(err) : res(out));
 		});
 	}
 
@@ -201,8 +177,7 @@ export default class ConfigurationGenerator extends EventEmmiter {
 			const currentTemplateHash = createHash('md5').update(configContent).digest('hex');
 			if (existsConfigHash !== currentTemplateHash) {
 				await writeFile(destinationPath, configContent);
-				debug('Configuration file has been changed');
-
+				debug('Configuration file has been changed, and will recreated');
 			} else {
 				debug('Configuration file not changed');
 				canReloadContainer = false;

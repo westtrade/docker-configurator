@@ -1,25 +1,28 @@
 {
   "name": "docker-configurator",
-  "version": "1.0.2",
-  "description": "",
+  "version": "1.0.3",
+  "description": "Generate configuration for docker container apps like nginx, from it's metadata such as container container port or any environemnt variables. Watch for container changes and reload container.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "babel-node ./ --use-strict --harmony",
-    "build": "babel src -d lib",
-    "dev": "nodemon ./index.js --template=\"./.data/test.dust:./.data/nginx.conf:webfront\" --use-strict --harmony"
+    "test": "ava",
+    "start": "./.bin/docker-configurator.js",
+    "dev": "DEBUG=docker-configurator-* nodemon ./index.js --template='./.data/test.dust:./.data/nginx.conf:webfront'"
   },
   "bin": {
-	  "docker-configurator": "./.bin/docker-configurator.js"
+    "docker-configurator": "./.bin/docker-configurator.js"
   },
-  "repository" :  {
-	  "type" : "git",
-	  "url" : "https://github.com/westtrade/docker-configurator.git"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/westtrade/docker-configurator.git"
   },
-  "keywords": ["docker"],
+  "keywords": [
+    "docker"
+  ],
   "author": "Popov Gennadiy <me@westtrade.tk>",
   "license": "MIT",
   "dependencies": {
+    "babel-plugin-add-module-exports": "^0.2.1",
+    "babel-plugin-transform-es2015-modules-commonjs": "^6.18.0",
     "babel-register": "^6.18.0",
     "chalk": "^1.1.3",
     "chokidar": "^1.6.1",
@@ -34,8 +37,6 @@
     "mongo-querystring": "^4.0.2",
     "nedb-promise": "^2.0.0",
     "qs": "^6.3.0",
-	"babel-plugin-add-module-exports": "^0.2.1",
-	"babel-plugin-transform-es2015-modules-commonjs": "^6.18.0",
     "tar-stream": "^1.5.2"
   },
   "devDependencies": {

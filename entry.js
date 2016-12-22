@@ -3,37 +3,53 @@
 * @Date:   2016-11-25T04:43:34+03:00
 * @Email:  me@westtrade.tk
 * @Last modified by:   dio
-* @Last modified time: 2016-12-01T08:30:27+03:00
+* @Last modified time: 2016-12-22T03:59:23+03:00
 */
+
+'use strict';
 
 import config from 'config';
 import createDebugLog from 'debug';
 import Docker from 'dockerode';
-import program from 'commander';
 
-import { argvReducer } from './src/argv';
+import { existsSync } from 'fs';
+import assert from 'assert';
+
+import { tryCatch } from './src/utils';
+import argvReducer from './src/argv';
 import ConfigurationGenerator from './src/generator';
 import ContainersWatcherClass from './src/registrator';
-import { version, name } from './package.json';
+import { name } from './package.json';
 
 const debug = createDebugLog(`${name}-entry`);
 
-program
-	.version(version)
-	.option('-t, --template <path>', 'Configuration template')
-	.parse(process.argv);
+const socketPath = config.get('socket-path');
+const datastoreSettings = config.get('database');
 
 let templates = config.get('templates');
-const { templates: templatesCLI } = process.argv.reduce(argvReducer('-t', '--template', 'templates'), {});
+const { templates: templatesCLI } = process.argv.reduce(argvReducer('-t', '--template', 'templates'), {})
+
+
 if (templatesCLI && templatesCLI.length) {
-	debug('Templates list overrided by command line parameter');
+
+	if (templates.length) {
+		debug('Templates list overridden by command line parameter');
+	}
+
 	templates = templatesCLI;
 }
 
-const socketPath = config.get('socket-path');
-const dockerClient = new Docker({ socketPath });
-const datastoreSettings = config.get('database');
+const [bootstrapError] = tryCatch(() => {
+	assert(templates && templates.length, 'Templates list is empty');
+	assert(existsSync(socketPath), `Docker socket on path ${socketPath} doesn't exists.`);
+});
 
+if (bootstrapError) {
+	debug(bootstrapError);
+	process.exit();
+}
+
+const dockerClient = new Docker({ socketPath });
 const watcher = new ContainersWatcherClass({ dockerClient, datastoreSettings });
 const generator = new ConfigurationGenerator({ dockerClient, templates, watcher });
 

@@ -3,11 +3,12 @@
 * @Date:   2016-11-26T10:54:35+03:00
 * @Email:  me@westtrade.tk
 * @Last modified by:   dio
-* @Last modified time: 2016-11-26T11:26:33+03:00
+* @Last modified time: 2016-12-21T21:44:40+03:00
 */
 
+'use strict';
 
-export const argvReducer = (short, full, propertyName) => {
+const argvReducer = (short, full, propertyName) => {
 
 	const argKeys = [short, full];
 	return (resultObject, currentArg, currentIdx, argv) => {
@@ -47,3 +48,5 @@ export const argvReducer = (short, full, propertyName) => {
 		return resultObject;
 	};
 };
+
+export default argvReducer;

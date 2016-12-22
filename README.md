@@ -1,17 +1,45 @@
-<!--
-@Author: Popov Gennadiy <dio>
-@Date:   2016-11-27T10:21:20+03:00
-@Email:  me@westtrade.tk
-@Last modified by:   dio
-@Last modified time: 2016-11-27T10:22:34+03:00
--->
-
 # Configurator for docker containers
 
+Generate configuration for docker container apps like nginx, from its metadata
+such as ip, port or any environment variables. Watch for container changes and
+reload container.
 
-<!--
-[![Codacy](https://img.shields.io/codacy/74513f5b1d8b46e09d134615c5b53385.svg)](https://www.codacy.com/app/westtrade/waterlock-vkontakte-auth)
-[![Build Status](https://img.shields.io/travis/westtrade/waterlock-vkontakte-auth.svg?style=flat)](https://travis-ci.org/westtrade/waterlock-vkontakte-auth)
-[![NPM version](https://img.shields.io/npm/v/waterlock-vkontakte-auth.svg?style=flat)](http://badge.fury.io/js/waterlock-vkontakte-auth)
-[![Dependency Status](https://gemnasium.com/westtrade/waterlock-vkontakte-auth.svg?style=flat)](https://gemnasium.com/westtrade/waterlock-vkontakte-auth)
--->
+## Run outside of docker
+
+Install docker-configurator with npm
+
+```shell
+npm i docker-configurator -g
+```
+or yarn way
+
+```shell
+yarn global add docker-configurator
+```
+
+Create next folder structure inside any folder
+
+```
+./
+	config/
+	template.dust
+	service.conf
+```
+
+and run
+
+```shell
+docker-configurator
+```
+
+
+
+## Templates
+
+### Helpers
+
+**inspect**
+
+**containers**
+
+**json**
