@@ -3,7 +3,7 @@
 * @Date:   2016-11-26T11:27:20+03:00
 * @Email:  me@westtrade.tk
 * @Last modified by:   dio
-* @Last modified time: 2016-12-22T04:24:44+03:00
+* @Last modified time: 2016-12-22T06:22:54+03:00
 */
 
 'use strict';
@@ -11,12 +11,14 @@
 import createDebugLog from 'debug';
 import EventEmmiter from 'events';
 import Dust from 'dustjs-linkedin';
-import MongoQS from 'mongo-querystring';
+// import MongoQS from 'mongo-querystring';
 import chokidar from 'chokidar';
 import qs from 'qs';
 import { resolve as pathResolve } from 'path';
 import { createHash } from 'crypto';
 import assert from 'assert';
+
+
 
 import { readFile, writeFile, restartContainer, getFileMD5 } from '../fs';
 import { name } from '../../package.json';
@@ -49,7 +51,7 @@ export default class ConfigurationGenerator extends EventEmmiter {
 			templates: templates || [],
 			watcher,
 			dockerClient,
-			templatesHash: {},
+			// templatesHash: {},
 			templatesCache: [],
 			next: Promise.resolve(),
 		};
@@ -116,29 +118,37 @@ export default class ConfigurationGenerator extends EventEmmiter {
 			this[privateProperties].next = next.catch(reasonError => this.emit('error', reasonError));
 		});
 
+		const watchConfig = {
+			persistent: true,
+			usePolling: true,
+			awaitWriteFinish: {
+				pollInterval: 100,
+				stabilityThreshold: 250,
+			},
+		};
+
 		const watchedFilesList = templates.map(([templatePath]) => pathResolve(templatePath));
-		const watchedFiles = chokidar.watch(watchedFilesList, { persistent: true });
+		const watchedFiles = chokidar.watch(watchedFilesList, watchConfig);
 		watchedFiles.on('change', (...args) => {
-			debug('Tempalte changed');
 			const next = this[containersChangeHandler](...args);
 			this[privateProperties].next = next.catch(reasonError => this.emit('error', reasonError));
 		});
 		// this.on('update', containers => this[configurationGenerator](containers));
 	}
 
-	renderTemplate(templateContent = '') {
+	renderTemplate(templatePath, templateContent = '') {
 
 		const templateID = createHash('md5').update(templateContent).digest('hex');
 		debug('Render template. Template source hash: %s', templateID);
 		if (!this[privateProperties].templatesCache.includes(templateID)) {
 			debug('Template does not exists, create it from string');
-			const compiledTemplate = Dust.compile(templateContent, templateID);
+			const compiledTemplate = Dust.compile(templateContent, templatePath);
 			Dust.loadSource(compiledTemplate);
 			this[privateProperties].templatesCache.push(templateID);
 		}
 
 		return new Promise((res, rej) => {
-			Dust.render(templateID, this[renderContextKey], (err, out) => err ? rej(err) : res(out));
+			Dust.render(templatePath, this[renderContextKey], (err, out) => err ? rej(err) : res(out));
 		});
 	}
 
@@ -173,7 +183,7 @@ export default class ConfigurationGenerator extends EventEmmiter {
 
 			const existsConfigHash = await getFileMD5(destinationPath);
 			const templateSource = await readFile(templatePath);
-			const configContent = await this.renderTemplate(templateSource);
+			const configContent = await this.renderTemplate(templatePath, templateSource);
 			const currentTemplateHash = createHash('md5').update(configContent).digest('hex');
 			if (existsConfigHash !== currentTemplateHash) {
 				await writeFile(destinationPath, configContent);

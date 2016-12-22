@@ -2,7 +2,7 @@
 # @Date:   2016-11-28T00:57:24+03:00
 # @Email:  me@westtrade.tk
 # @Last modified by:   dio
-# @Last modified time: 2016-12-22T00:10:55+03:00
+# @Last modified time: 2016-12-22T05:46:33+03:00
 
 
 version: '2'
@@ -11,14 +11,16 @@ services:
 
     docker-configurator:
         build: ./
+        # service_name: docker-configurator
         volumes:
-            - /var/run/docker.sock:ro
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - ../TMP/config:/etc/docker-configurator/config
 
         #https://github.com/lorenwest/node-config/wiki/Environment-Variables
         environment:
-            DEBUG: docker-configurator
-            NODE_CONFIG: '
-                {
-                    "socket-path": "/var/run/docker.sock"
-                }
-                '
+            DEBUG: docker-configurator-*
+            # NODE_CONFIG: '
+            #     {
+            #         "socket-path": "/var/run/docker.sock"
+            #     }
+            #     '
