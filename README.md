@@ -1,5 +1,7 @@
 # Configurator for docker containers
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/b335ba3878a242f08c89a0dad93a4919)](https://www.codacy.com/app/westtrade/docker-configurator?utm_source=github.com&utm_medium=referral&utm_content=westtrade/docker-configurator&utm_campaign=badger)
+
 Generate configuration for docker container apps like nginx, from its metadata
 such as ip, port or any environment variables. Watch for container changes and
 reload container.
