@@ -6,7 +6,7 @@
   "scripts": {
     "test": "ava",
     "start": "./.bin/docker-configurator.js",
-    "dev": "DEBUG=docker-configurator-* nodemon ./index.js --template='./.data/test.dust:./.data/nginx.conf:webfront'"
+    "dev": "DEBUG=docker-configurator-* nodemon ./index.js --template='./.data/test.ejs:./.data/nginx.conf:webfront'"
   },
   "bin": {
     "docker-configurator": "./.bin/docker-configurator.js"
@@ -21,6 +21,7 @@
   "author": "Popov Gennadiy <me@westtrade.tk>",
   "license": "MIT",
   "dependencies": {
+    "aresig": "^1.0.5",
     "babel-plugin-add-module-exports": "^0.2.1",
     "babel-plugin-transform-es2015-modules-commonjs": "^6.18.0",
     "babel-register": "^6.18.0",
@@ -29,8 +30,6 @@
     "config": "^1.24.0",
     "debug": "^2.3.3",
     "dockerode": "^2.3.1",
-    "dustjs-helpers": "^1.7.3",
-    "dustjs-linkedin": "^2.7.4",
     "js-yaml": "^3.7.0",
     "microtime": "^2.1.1",
     "mongo-querystring": "^4.0.2",

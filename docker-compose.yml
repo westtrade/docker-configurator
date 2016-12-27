@@ -2,7 +2,7 @@
 # @Date:   2016-11-28T00:57:24+03:00
 # @Email:  me@westtrade.tk
 # @Last modified by:   dio
-# @Last modified time: 2016-12-22T05:46:33+03:00
+# @Last modified time: 2016-12-22T06:39:27+03:00
 
 
 version: '2'
@@ -14,7 +14,7 @@ services:
         # service_name: docker-configurator
         volumes:
             - /var/run/docker.sock:/var/run/docker.sock:ro
-            - ../TMP/config:/etc/docker-configurator/config
+            - ./config:/etc/docker-configurator/config
 
         #https://github.com/lorenwest/node-config/wiki/Environment-Variables
         environment:

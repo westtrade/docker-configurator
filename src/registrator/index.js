@@ -3,7 +3,7 @@
 * @Date:   2016-11-25T04:54:02+03:00
 * @Email:  me@westtrade.tk
 * @Last modified by:   dio
-* @Last modified time: 2016-12-22T02:47:34+03:00
+* @Last modified time: 2016-12-27T02:44:34+03:00
 */
 
 'use strict';
@@ -167,6 +167,7 @@ export default class ContainersWatcher extends EventEmmiter {
 			await this[privateMethodUpdate](eventData);
 			await this[privateKey].store.removeIndex('dockerId');
 		}
+
 	}
 
 	/**
@@ -186,7 +187,7 @@ export default class ContainersWatcher extends EventEmmiter {
 	 * @return {type} Description
 	 */
 	find(...args) {
-		return this[privateKey].store.find(...args);
+		return this[privateKey].store.cfind(...args);
 	}
 
 	/**
